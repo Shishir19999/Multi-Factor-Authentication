@@ -62,36 +62,38 @@ async function sendOtpEmail(email, otp) {
 
 // Registration endpoint
 app.post('/auth/register', async (req, res) => {
-  const { email, password } = req.body;
-
-  try {
-    // Check if the email already exists in the database
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({
+    const { email, password } = req.body;
+  
+    try {
+      // Check if the email already exists in the database
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email already exists',
+        });
+      }
+  
+      // Hash the password before saving it to the database
+      const hashedPassword = await bcrypt.hash(password, 10);
+  
+      // Create a new user document
+      const newUser = new User({ email, password: hashedPassword });
+  
+      // Save the user to the database
+      await newUser.save();
+  
+      // Include the redirect URL in the response
+      return res.json({ success: true, message: 'User registered successfully', redirectTo: '/login' });
+    } catch (error) {
+      console.error('Error during registration:', error.message);
+      return res.status(500).json({
         success: false,
-        message: 'Email already exists',
+        message: 'An error occurred during registration',
       });
     }
-
-    // Hash the password before saving it to the database
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Create a new user document
-    const newUser = new User({ email, password: hashedPassword });
-
-    // Save the user to the database
-    await newUser.save();
-
-    return res.json({ success: true, message: 'User registered successfully' });
-  } catch (error) {
-    console.error('Error during registration:', error.message);
-    return res.status(500).json({
-      success: false,
-      message: 'An error occurred during registration',
-    });
-  }
-});
+  });
+  
 
 // Login endpoint
 app.post('/auth/login', async (req, res) => {
