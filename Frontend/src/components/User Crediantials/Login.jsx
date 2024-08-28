@@ -43,8 +43,7 @@ const Login = () => {
  
             if (otpResponse.data.success) {
                 alert('OTP Verified. User logged in.');
-                // Redirect to your dashboard or perform any 
-                // additional actions for successful login
+               
             } else {
                 alert('Invalid OTP. Please try again.');
             }
