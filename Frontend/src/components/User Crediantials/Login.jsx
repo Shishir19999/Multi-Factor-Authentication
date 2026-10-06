@@ -1,91 +1,115 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
- 
+import { useNavigate } from 'react-router-dom';
+import { setToken } from '../../auth/auth';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+
+const errMessage = (error, fallback) => error.response?.data?.message || fallback;
+
 const Login = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [otp, setOtp] = useState('');
     const [showOtpField, setShowOtpField] = useState(false);
- 
+    const [cooldown, setCooldown] = useState(0);
+    const [info, setInfo] = useState('');
+    const navigate = useNavigate();
+
+    // Countdown for the resend button
+    useEffect(() => {
+        if (cooldown <= 0) return undefined;
+        const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
+        return () => clearTimeout(t);
+    }, [cooldown]);
+
     const handleLogin = async () => {
+        setInfo('');
         try {
-            const response =
-                await axios.post(
-                    'http://localhost:8080/auth/login',
-                    {
-                        email,
-                        password
-                    }
-                );
- 
+            const response = await axios.post(`${API_URL}/auth/login`, { email, password });
+
             if (response.data.success) {
                 setShowOtpField(true);
-                alert('OTP sent to your email. Check your inbox.');
+                setOtp('');
+                setCooldown(response.data.resendCooldownSeconds || 30);
+                setInfo('OTP sent to your email. Check your inbox.');
             } else {
-                alert(response.data.message);
+                setInfo(response.data.message);
             }
         } catch (error) {
             console.error('Error during login:', error.message);
-            alert('An error occurred during login');
+            setInfo(errMessage(error, 'An error occurred during login'));
         }
     };
- 
-    const handleOtpVerification = async () => {
+
+    const handleResend = async () => {
+        setInfo('');
         try {
-            const otpResponse =
-                await
-                    axios.post(
-                        'http://localhost:8080/auth/verify-otp',
-                        {
-                            otp
-                        }
-                    );
- 
+            const response = await axios.post(`${API_URL}/auth/resend-otp`, { email });
+            if (response.data.success) {
+                setCooldown(response.data.resendCooldownSeconds || 30);
+                setInfo('A new code has been sent.');
+            }
+        } catch (error) {
+            const wait = error.response?.data?.retryAfterSeconds;
+            if (wait) setCooldown(wait);
+            setInfo(errMessage(error, 'Could not resend the code'));
+        }
+    };
+
+    const handleOtpVerification = async () => {
+        setInfo('');
+        try {
+            const otpResponse = await axios.post(`${API_URL}/auth/verify-otp`, { email, otp });
+
             if (otpResponse.data.success) {
-                alert('OTP Verified. User logged in.');
-               
+                setToken(otpResponse.data.token);
+                navigate('/dashboard', { replace: true });
             } else {
-                alert('Invalid OTP. Please try again.');
+                setInfo(otpResponse.data.message || 'Invalid OTP. Please try again.');
             }
         } catch (error) {
             console.error('Error during OTP verification:', error.message);
-            alert('An error occurred during OTP verification');
+            setInfo(errMessage(error, 'An error occurred during OTP verification'));
         }
     };
- 
+
     return (
         <div className="login-container">
             <input type="email"
                 placeholder="Email"
-                onChange={
-                    (e) =>
-                        setEmail(e.target.value)} />
+                onChange={(e) => setEmail(e.target.value)} />
             <input type="password"
                 placeholder="Password"
-                onChange={
-                    (e) =>
-                        setPassword(e.target.value)} />
- 
+                onChange={(e) => setPassword(e.target.value)} />
+
             {showOtpField && (
                 <>
                     <input type="text"
                         placeholder="OTP"
-                        onChange={
-                            (e) =>
-                                setOtp(e.target.value)} />
+                        inputMode="numeric"
+                        maxLength={6}
+                        value={otp}
+                        onChange={(e) => setOtp(e.target.value)} />
                     <button className="login-button"
                         onClick={handleOtpVerification}>
                         Verify OTP
                     </button>
+                    <button className="login-button"
+                        onClick={handleResend}
+                        disabled={cooldown > 0}>
+                        {cooldown > 0 ? `Resend code (${cooldown}s)` : 'Resend code'}
+                    </button>
                 </>
             )}
- 
+
             <button className="login-button"
                 onClick={handleLogin}>
                 Login
             </button>
+            {info && <p role="status">{info}</p>}
         </div>
     );
 };
- 
+
 export default Login;
