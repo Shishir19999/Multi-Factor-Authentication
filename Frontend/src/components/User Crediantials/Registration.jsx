@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import axios from 'axios';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
 const Registration = () => {
     const [email, setEmail] = useState('');
@@ -14,7 +16,7 @@ const Registration = () => {
                 return;
             }
 
-            const response = await axios.post('http://localhost:8080/auth/register', {
+            const response = await axios.post(`${API_URL}/auth/register`, {
                 email,
                 password
             });
@@ -27,7 +29,7 @@ const Registration = () => {
             }
         } catch (error) {
             console.error('Error during registration:', error.message);
-            setMessage('An error occurred during registration');
+            setMessage(error.response?.data?.message || 'An error occurred during registration');
         }
     };
 
