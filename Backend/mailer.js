@@ -43,6 +43,19 @@ export function buildOtpMessage(email, otp, env = process.env) {
   };
 }
 
+// Pure helper: account recovery message (also honours OTP_REDIRECT_EMAIL).
+export function buildRecoveryMessage(email, code, env = process.env) {
+  const redirect = (env.OTP_REDIRECT_EMAIL || '').trim();
+  return {
+    from: fromAddress(env),
+    to: redirect || email,
+    subject: redirect ? `Account recovery code (for ${email})` : 'Account recovery code',
+    text: `Your account recovery code is: ${code}
+
+It is valid for 15 minutes. If you did not request it, you can ignore this message.`,
+  };
+}
+
 export function createTransport(env = process.env) {
   return nodemailer.createTransport(smtpOptions(env));
 }
@@ -51,6 +64,11 @@ export function createTransport(env = process.env) {
 export async function sendOtpEmail(email, otp) {
   const info = await createTransport().sendMail(buildOtpMessage(email, otp));
   console.log('Email sent: ' + info.response);
+}
+
+export async function sendRecoveryEmail(email, code) {
+  const info = await createTransport().sendMail(buildRecoveryMessage(email, code));
+  console.log('Recovery email sent: ' + info.response);
 }
 
 export function logMailStartupChecks(env = process.env, log = console) {
