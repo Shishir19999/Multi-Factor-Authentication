@@ -1,17 +1,47 @@
 # Multi Factor Authentication
 
-Email + password login with a second factor: a 6-digit one-time password (OTP) emailed to the user.
+**Live demo (browser only, no server):** https://shishir19999.github.io/Multi-Factor-Authentication/
+
+Email + password sign-in with a second factor: a 6-digit one-time code by e-mail, or a standard authenticator app (TOTP, RFC 6238), plus backup codes, trusted devices, a security dashboard and account recovery.
 
 **Stack:** React 19 + Vite 8 (Frontend), Express 5 + Mongoose 9 + Nodemailer + bcrypt (Backend). Node 24 LTS or newer.
 
-## Flow
-1. `POST /auth/register` - `{ email, password }`; password is stored bcrypt-hashed.
-2. `POST /auth/login` - checks credentials, generates a 6-digit OTP (valid 5 minutes), stores only its bcrypt hash and emails it. Rate limited (10 / 15 min per IP).
-3. `POST /auth/resend-otp` - `{ email }`; issues a new OTP, only after a password login, with a 30 second cooldown (429 + `retryAfterSeconds` otherwise).
-4. `POST /auth/verify-otp` - `{ email, otp }`; rate limited (20 / 15 min per IP). After 5 wrong attempts the OTP is invalidated and the user must log in again. On success returns `{ success, token, user }`, a JWT signed with `JWT_SECRET`, valid 1 hour.
-5. `GET /auth/me` - protected; send `Authorization: Bearer <token>`.
+## Features
+- Sign-up and sign-in with a live password-strength meter and rule checklist.
+- E-mail one-time codes (5 minute expiry, attempt limit, resend cooldown) and authenticator-app TOTP enrolment with a QR code (works with Google Authenticator).
+- Ten single-use backup codes (download, print, copy), shown once.
+- Trusted-device option (skip the second step for 30 days) that can be revoked.
+- Security dashboard: recent sign-in log, active sessions with revoke, change password, switch or disable 2FA after re-entering the password.
+- Lockout and rate-limit messaging with a countdown; account recovery by e-mailed code.
+- Light/dark theme (follows the OS, remembered), responsive from 320px, keyboard and screen-reader friendly (6-box code input with paste and auto-advance, aria-live messages).
+- Parallax and scroll-reveal are used only on the landing hero and section backgrounds, never on forms, code entry or security screens. They use only transform and opacity, run through IntersectionObserver and requestAnimationFrame, and switch off for prefers-reduced-motion, small screens and low-power or data-saver devices.
 
-Frontend: the token is kept in `localStorage`, `/dashboard` is wrapped in a `ProtectedRoute`, and Logout clears the token. The login form has a "Resend code" button with a countdown.
+## Run the browser-only demo
+```bash
+cd Frontend
+npm install
+VITE_DEMO=true npm run dev      # PowerShell: $env:VITE_DEMO='true'; npm run dev
+npm run build:pages             # static site for GitHub Pages in Frontend/dist (base /Multi-Factor-Authentication/, hash routing)
+```
+The demo replaces the server with an in-browser backend (data in localStorage, realistic latency). No e-mail is sent: one-time codes appear in the labelled **Demo inbox** panel. TOTP is real (WebCrypto), so you can scan the QR code with an authenticator app. Use **Reset demo data** in the banner to start over.
+
+Demo logins (password `Demo@12345`):
+
+| E-mail | Second factor |
+|---|---|
+| `demo@example.com` | E-mail code (read it in the Demo inbox) |
+| `alice@example.com` | Authenticator app (live code shown on the sign-in page, secret `JBSWY3DPEHPK3PXP`, backup code `abcde-fghjk`) |
+| `bob@example.com` | None |
+
+## Run full-stack
+See Setup below. The real backend exposes `/auth/register`, `/auth/login`, `/auth/resend-otp`, `/auth/verify-otp`, `/auth/me`, `/auth/logout`, `/auth/security`, `/auth/activity`, `/auth/sessions` (list, `DELETE /:sid`, `POST /revoke-others`), `/auth/change-password`, `/auth/2fa/method`, `/auth/2fa/totp/setup`, `/auth/2fa/totp/enable`, `/auth/backup-codes/regenerate`, `/auth/trusted-devices` (DELETE), `/auth/recover/request` and `/auth/recover/reset`. Sensitive actions require the current password.
+
+## Original e-mail flow
+1. `POST /auth/register` - `{ email, password }`; password is stored bcrypt-hashed.
+2. `POST /auth/login` - checks credentials, creates a 6-digit OTP (valid 5 minutes), stores only its bcrypt hash and e-mails it. Rate limited.
+3. `POST /auth/resend-otp` - `{ email }`; a new OTP after a password login, with a 30 second cooldown (429 + `retryAfterSeconds`).
+4. `POST /auth/verify-otp` - `{ email, otp }`; after 5 wrong attempts the OTP is invalidated. On success returns `{ success, token, user }` (JWT).
+5. `GET /auth/me` - protected; send `Authorization: Bearer <token>`.
 
 ## Setup
 ```bash
@@ -33,11 +63,10 @@ Backend: `PORT`, `MONGODB_URL`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_U
 Frontend: `VITE_API_URL` (default `http://localhost:8080`).
 
 ## Notes
-- JWTs are stateless: logout only removes the token client-side; it stays valid until it expires (1h).
 - Never commit `Backend/.env`.
 
 ## Demo data
-`cd Backend && npm run seed` (idempotent, deterministic, database `mfa`) creates 25 users in `users`, all with password `Demo@12345`. Documented logins: `demo@example.com`, `alice@example.com`, `bob@example.com` (the other 22 are generated `first.last@example.com` addresses). Set `DEMO_EMAIL` to change the demo account's address (default `demo@example.com`). Login still emails an OTP, so point `SMTP_*` at a mailbox you can read or a local fake SMTP server, or use `OTP_REDIRECT_EMAIL` (below).
+`cd Backend && npm run seed` (idempotent, deterministic, database `mfa`) creates 25 users in `users`, all with password `Demo@12345`. Documented logins: `demo@example.com`, `alice@example.com`, `bob@example.com` (the other 22 are `first.last@example.com` sample addresses). Set `DEMO_EMAIL` to change the demo account's address (default `demo@example.com`). Login still emails an OTP, so point `SMTP_*` at a mailbox you can read or a local fake SMTP server, or use `OTP_REDIRECT_EMAIL` (below).
 
 
 ## Deploy with Docker
