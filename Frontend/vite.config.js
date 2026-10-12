@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// `vite build --mode pages` produces the static, browser-only demo for GitHub Pages.
+// `vite build --mode pages` produces the static, Live preview for GitHub Pages.
 export default defineConfig(({ mode }) => {
   const pages = mode === 'pages'
   return {

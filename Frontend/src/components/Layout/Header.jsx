@@ -51,6 +51,7 @@ function Header() {
           {status === 'authed' && user ? (
             <>
               <NavLink to="/dashboard" className="nav-link">Dashboard</NavLink>
+              {user.role === 'admin' && <NavLink to="/admin" className="nav-link">Admin</NavLink>}
               <button type="button" className="nav-link nav-btn" onClick={handleSignOut}>Sign out</button>
             </>
           ) : (

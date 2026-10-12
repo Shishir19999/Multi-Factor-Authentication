@@ -6,14 +6,15 @@ import ThemeProvider from './context/ThemeProvider';
 import ToastProvider from './context/ToastProvider';
 import ConfirmProvider from './context/ConfirmProvider';
 import AuthProvider from './context/AuthProvider';
-import { IS_DEMO } from './config';
+import PolicyProvider from './context/PolicyProvider';
+import { IS_PREVIEW } from './config';
 import { initMotion } from './lib/motion';
 import './styles/index.css';
 
 initMotion();
 
-// GitHub Pages cannot rewrite deep links, so the static demo uses hash routing (works under any sub-path).
-const routerType = IS_DEMO ? HashRouter : BrowserRouter;
+// GitHub Pages cannot rewrite deep links, so the static Live preview uses hash routing (works under any sub-path).
+const routerType = IS_PREVIEW ? HashRouter : BrowserRouter;
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -22,7 +23,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <ConfirmProvider>
           {createElement(routerType, null, (
             <AuthProvider>
-              <App />
+              <PolicyProvider>
+                <App />
+              </PolicyProvider>
             </AuthProvider>
           ))}
         </ConfirmProvider>

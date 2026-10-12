@@ -1,23 +1,32 @@
 import { Link } from 'react-router-dom';
-import { IS_DEMO } from '../config';
+import { IS_PREVIEW } from '../config';
 import { useAuth } from '../context/contexts';
 import { Parallax, Reveal } from '../components/ui/Motion';
 
 const FEATURES = [
   { icon: '✉', title: 'E-mail one-time codes', text: 'A 6-digit code valid for five minutes, with attempt limits and a resend cooldown.' },
   { icon: '⏱', title: 'Authenticator app (TOTP)', text: 'Standard RFC 6238 codes. Scan the QR code with Google Authenticator or any compatible app.' },
-  { icon: '🗝', title: 'Backup codes', text: 'Ten single-use codes for when your phone is gone. Download or print them once.' },
-  { icon: '✔', title: 'Trusted devices', text: 'Skip the second step on a device you trust for 30 days, and forget it any time.' },
-  { icon: '▤', title: 'Active sessions', text: 'See where you are signed in and revoke any session with one click.' },
-  { icon: '◷', title: 'Sign-in log', text: 'A timeline of successful and failed attempts so unusual activity stands out.' },
-  { icon: '⚑', title: 'Lockout protection', text: 'Repeated wrong passwords lock the account for a while, with clear countdown messaging.' },
-  { icon: '↺', title: 'Account recovery', text: 'Reset a forgotten password with an e-mailed code. All other sessions are signed out.' },
+  { icon: '🔑', title: 'Passkeys (WebAuthn)', text: 'Sign in with a fingerprint, screen lock or security key. Phishing-resistant, no password typed.' },
+  { icon: '🗝', title: 'Backup and recovery', text: 'Single-use backup codes, a verified recovery e-mail and administrator-assisted recovery.' },
+  { icon: '✔', title: 'Step-up confirmation', text: 'Sensitive changes ask you to confirm it is you again, with a password, a code or a passkey.' },
+  { icon: '⚑', title: 'Was this you?', text: 'A new device or place triggers an alert e-mail with one-tap "yes" or "secure my account".' },
+  { icon: '★', title: 'Security score', text: 'A 0 to 100 score with ranked recommendations tells you what to fix first.' },
+  { icon: '▤', title: 'Sessions and devices', text: 'Name your devices, see where you are signed in and sign out one, the others or everywhere.' },
+  { icon: '◷', title: 'Activity and export', text: 'A timeline of sign-ins and security changes, exportable as CSV or JSON.' },
+  { icon: '⚿', title: 'Breached-password check', text: 'Optional k-anonymity lookup: only the first 5 characters of a hash ever leave your browser.' },
+  { icon: '⌘', title: 'Personal API tokens', text: 'Scoped, read-only tokens that are stored only as a hash and can be revoked at once.' },
+  { icon: '⚙', title: 'Admin console and policy', text: 'Users, lock and unlock, forced resets, an audit log with CSV export and configurable security rules.' },
 ];
 
 const STEPS = [
-  { n: 1, title: 'Create an account', text: 'Choose a password and watch the strength meter and rules update as you type.' },
-  { n: 2, title: 'Pick a second factor', text: 'Receive codes by e-mail, or scan a QR code to use an authenticator app.' },
-  { n: 3, title: 'Stay in control', text: 'Review sessions and activity, change your password and rotate backup codes.' },
+  { n: 1, title: 'Create an account', text: 'Choose a password and watch the strength meter and the policy rules update as you type.' },
+  { n: 2, title: 'Pick your second step', text: 'Receive codes by e-mail, scan a QR code for an authenticator app, or add a passkey.' },
+  { n: 3, title: 'Stay in control', text: 'Follow the score, review sessions and alerts, export your activity and rotate backup codes.' },
+];
+
+const ROLES = [
+  { title: 'Member', text: 'Manages their own sign-in methods, devices, recovery options, activity and API tokens.' },
+  { title: 'Administrator', text: 'Everything a member can do, plus the console: users, lock and unlock, forced resets, help requests, the audit log and the security policy.' },
 ];
 
 function Landing() {
@@ -31,18 +40,18 @@ function Landing() {
         <Parallax speed={-0.12} className="hero-bg hero-bg-b"><span /></Parallax>
         <div className="container hero-grid">
           <div className="hero-copy">
-            <Reveal as="p" className="eyebrow">Two-step verification</Reveal>
+            <Reveal as="p" className="eyebrow">Account security</Reveal>
             <Reveal as="h1" delay={80}>Sign-in security you can see working</Reveal>
             <Reveal as="p" delay={160} className="lead">
-              Password plus a one-time code from your e-mail or an authenticator app, with backup codes, session control and a full sign-in history.
+              Password plus an e-mail code, an authenticator app or a passkey, with alerts, recovery options, session control, a security score and an admin console.
             </Reveal>
             <Reveal delay={240} className="row gap wrap">
               {signedIn ? (
                 <Link to="/dashboard" className="btn btn-primary">Open your dashboard</Link>
               ) : (
                 <>
-                  <Link to={IS_DEMO ? '/login' : '/register'} className="btn btn-primary">{IS_DEMO ? 'Try the live demo' : 'Create an account'}</Link>
-                  <Link to={IS_DEMO ? '/register' : '/login'} className="btn btn-secondary">{IS_DEMO ? 'Create a demo account' : 'Sign in'}</Link>
+                  <Link to={IS_PREVIEW ? '/login' : '/register'} className="btn btn-primary">{IS_PREVIEW ? 'Try the Live preview' : 'Create an account'}</Link>
+                  <Link to={IS_PREVIEW ? '/register' : '/login'} className="btn btn-secondary">{IS_PREVIEW ? 'Create a sample account' : 'Sign in'}</Link>
                 </>
               )}
             </Reveal>
@@ -92,17 +101,31 @@ function Landing() {
         </div>
       </section>
 
+      <section className="section" aria-labelledby="roles-title">
+        <div className="container">
+          <Reveal><h2 id="roles-title" className="section-title">Two roles</h2></Reveal>
+          <ul className="steps">
+            {ROLES.map((r, i) => (
+              <Reveal as="li" key={r.title} delay={i * 90} className="card step">
+                <h3>{r.title}</h3>
+                <p>{r.text}</p>
+              </Reveal>
+            ))}
+          </ul>
+        </div>
+      </section>
+
       <section className="section cta-band">
         <div className="container">
           <Reveal>
-            <h2>{IS_DEMO ? 'Everything runs in your browser' : 'Ready to secure your account?'}</h2>
+            <h2>{IS_PREVIEW ? 'Everything runs in your browser' : 'Ready to secure your account?'}</h2>
             <p className="lead">
-              {IS_DEMO
-                ? 'The demo uses sample accounts and stores data only in this browser. Reset it whenever you like.'
+              {IS_PREVIEW
+                ? 'The Live preview uses sample accounts and stores data only in this browser. Reset it whenever you like.'
                 : 'Create an account and turn on two-step verification in under a minute.'}
             </p>
-            <Link to={signedIn ? '/dashboard' : IS_DEMO ? '/login' : '/register'} className="btn btn-primary">
-              {signedIn ? 'Open your dashboard' : IS_DEMO ? 'Open the demo' : 'Get started'}
+            <Link to={signedIn ? '/dashboard' : IS_PREVIEW ? '/login' : '/register'} className="btn btn-primary">
+              {signedIn ? 'Open your dashboard' : IS_PREVIEW ? 'Open the Live preview' : 'Get started'}
             </Link>
           </Reveal>
         </div>

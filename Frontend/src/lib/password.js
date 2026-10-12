@@ -1,25 +1,19 @@
-// Password rules and strength estimate shared by registration, reset and change-password forms.
-export const PASSWORD_MIN = 8;
-export const PASSWORD_MAX = 72;
+// Password rules (from the shared policy engine) and a strength estimate for the forms.
+import { defaultPolicy, passwordRules as sharedRules, passwordError } from '../shared/policy';
+
+export { PASSWORD_MAX_BYTES } from '../shared/policy';
 
 const COMMON = new Set([
   'password', 'password1', 'password123', 'passw0rd', '12345678', '123456789', '1234567890', 'qwerty123',
-  'qwertyuiop', 'iloveyou1', 'letmein123', 'welcome123', 'admin1234', 'abc12345', 'secret123', 'secret12',
+  'qwertyuiop', 'iloveyou1', 'letmein123', 'welcome123', 'admin1234', 'abc12345', 'secret123', 'secret12', 'sample@12345',
 ]);
 
-export function passwordRules(pw = '') {
-  return [
-    { id: 'len', label: `At least ${PASSWORD_MIN} characters`, ok: pw.length >= PASSWORD_MIN && pw.length <= PASSWORD_MAX },
-    { id: 'letter', label: 'A letter', ok: /[A-Za-z]/.test(pw) },
-    { id: 'number', label: 'A number', ok: /\d/.test(pw) },
-  ];
-}
-
-export const passwordValid = (pw) => passwordRules(pw).every((r) => r.ok);
+export const passwordRules = (pw = '', policy = defaultPolicy(), ctx = {}) => sharedRules(pw, policy, ctx);
+export const passwordValid = (pw, policy = defaultPolicy(), ctx = {}) => passwordError(pw, policy, ctx) === null;
 
 export const STRENGTH_LABELS = ['Very weak', 'Weak', 'Fair', 'Good', 'Strong'];
 
-export function passwordStrength(pw = '') {
+export function passwordStrength(pw = '', policy = defaultPolicy(), ctx = {}) {
   if (!pw) return { score: 0, label: 'Enter a password', empty: true };
   const classes = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter((re) => re.test(pw)).length;
   let score = 0;
@@ -28,7 +22,7 @@ export function passwordStrength(pw = '') {
   if (classes >= 3) score++;
   if (pw.length >= 16 && classes >= 2) score++;
   if (COMMON.has(pw.toLowerCase()) || /^(.)\1+$/.test(pw) || new Set(pw).size <= 3) score = 0;
-  if (!passwordValid(pw)) score = Math.min(score, 1);
+  if (!passwordValid(pw, policy, ctx)) score = Math.min(score, 1);
   return { score, label: STRENGTH_LABELS[score], empty: false };
 }
 

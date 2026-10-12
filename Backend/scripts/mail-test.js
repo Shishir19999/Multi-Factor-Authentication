@@ -1,14 +1,14 @@
-// `npm run mail:test` - sends ONE test email through the SMTP configured in Backend/.env (or process env)
-// and prints success/failure. Recipient: MAIL_TEST_TO, else OTP_REDIRECT_EMAIL, else the SMTP login.
+// `npm run mail:test` - sends ONE test e-mail through the SMTP configured in Backend/.env (or process env)
+// and prints success/failure. The recipient comes from ADMIN_NOTIFY_EMAIL (never hard-coded).
 import dotenv from 'dotenv';
-import { createTransport, fromAddress, smtpOptions, smtpUser, logMailStartupChecks } from '../mailer.js';
+import { createTransport, fromAddress, smtpOptions, logMailStartupChecks } from '../mailer.js';
 
 dotenv.config();
 logMailStartupChecks();
 
-const to = process.env.MAIL_TEST_TO || process.env.OTP_REDIRECT_EMAIL || smtpUser();
+const to = (process.env.ADMIN_NOTIFY_EMAIL || '').trim();
 if (!to) {
-  console.error('FAIL: no recipient. Set MAIL_TEST_TO (or OTP_REDIRECT_EMAIL / SMTP_USER).');
+  console.error('FAIL: no recipient. Set ADMIN_NOTIFY_EMAIL in Backend/.env.');
   process.exit(1);
 }
 const o = smtpOptions();

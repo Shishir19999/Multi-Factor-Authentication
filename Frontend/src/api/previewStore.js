@@ -1,7 +1,7 @@
-// Persistence for the in-browser demo backend: one JSON "database" and a demo inbox, both in localStorage
-// (falling back to memory when storage is blocked). Nothing here ever leaves the visitor's browser.
-const DB_KEY = 'mfa-demo-db-v1';
-const INBOX_KEY = 'mfa-demo-inbox-v1';
+// Persistence for the Live preview's in-browser backend: one JSON "database" and a Preview inbox, both in
+// localStorage (falling back to memory when storage is blocked). Nothing here ever leaves the visitor's browser.
+const DB_KEY = 'mfa-preview-db-v2';
+const INBOX_KEY = 'mfa-preview-inbox-v2';
 
 const memory = new Map();
 const storage = {
@@ -16,15 +16,16 @@ const parse = (raw, fallback) => { try { return raw ? JSON.parse(raw) : fallback
 export const loadDb = () => parse(storage.get(DB_KEY), null);
 export const saveDb = (db) => storage.set(DB_KEY, JSON.stringify(db));
 
-// ---- Demo inbox: stands in for the e-mail the real backend would send ----
+// ---- Preview inbox: stands in for the e-mail the real backend would send ----
 const listeners = new Set();
 const notify = () => listeners.forEach((fn) => fn());
 
 export const listMail = () => parse(storage.get(INBOX_KEY), []);
 
-export function pushMail({ to, subject, text, code }) {
-  const mail = { id: crypto.randomUUID(), to, subject, text, code, at: new Date().toISOString() };
-  storage.set(INBOX_KEY, JSON.stringify([mail, ...listMail()].slice(0, 20)));
+// kind: otp | recovery | verify-recovery-email | new-device | admin-test
+export function pushMail({ kind, to, subject, text, code, link }) {
+  const mail = { id: crypto.randomUUID(), kind, to, subject, text, code, link, at: new Date().toISOString() };
+  storage.set(INBOX_KEY, JSON.stringify([mail, ...listMail()].slice(0, 25)));
   notify();
   return mail;
 }
@@ -39,10 +40,10 @@ export function subscribeMail(fn) {
   return () => listeners.delete(fn);
 }
 
-// Wipes the demo database, inbox, sign-in token and trusted-device tokens, restoring the seeded sample data.
-export function resetDemoData() {
+// Wipes the preview database, inbox, sign-in token, trusted-device tokens and simulated passkeys, restoring the sample data.
+export function resetPreviewData() {
   storage.remove(DB_KEY);
   storage.remove(INBOX_KEY);
-  storage.keys().filter((k) => k.startsWith('mfa_')).forEach((k) => storage.remove(k));
+  storage.keys().filter((k) => k.startsWith('mfa_') && k !== 'mfa_theme').forEach((k) => storage.remove(k));
   notify();
 }

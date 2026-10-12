@@ -1,71 +1,71 @@
-import { useCallback, useRef, useState } from 'react';
-import { api } from '../api';
+import { useCallback, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { api, UNAUTHORIZED_EVENT } from '../api';
+import { clearToken } from '../auth/auth';
 import { useAuth } from '../context/contexts';
 import { useAsync } from '../hooks/useAsync';
 import ActivityPanel from '../components/dashboard/ActivityPanel';
 import OverviewPanel from '../components/dashboard/OverviewPanel';
 import PasswordPanel from '../components/dashboard/PasswordPanel';
+import RecoveryPanel from '../components/dashboard/RecoveryPanel';
 import SessionsPanel from '../components/dashboard/SessionsPanel';
-import TwoFactorPanel from '../components/dashboard/TwoFactorPanel';
+import SignInPanel from '../components/dashboard/SignInPanel';
+import TokensPanel from '../components/dashboard/TokensPanel';
+import Alert from '../components/ui/Alert';
+import Tabs from '../components/ui/Tabs';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
-  { id: 'twofactor', label: 'Two-step' },
+  { id: 'signin', label: 'Sign-in methods' },
+  { id: 'recovery', label: 'Recovery' },
   { id: 'sessions', label: 'Sessions' },
   { id: 'activity', label: 'Activity' },
   { id: 'password', label: 'Password' },
+  { id: 'tokens', label: 'API tokens' },
 ];
+const PENDING_TABS = TABS.filter((t) => ['signin', 'password'].includes(t.id));
 
 // Security dashboard. Deliberately static (no parallax / motion) because it is a dense, data-heavy screen.
+// An account with pending requirements (forced password change, required 2FA) only sees the screens that fix them.
 function Dashboard() {
-  const { user } = useAuth();
+  const { user, refresh } = useAuth();
+  const navigate = useNavigate();
   const [tab, setTab] = useState('overview');
-  const tabRefs = useRef({});
   const loadSecurity = useCallback(() => api.security(), []);
   const { data: security, error, loading, reload, setData } = useAsync(loadSecurity);
 
-  const onKeyDown = (e) => {
-    const i = TABS.findIndex((t) => t.id === tab);
-    let next = null;
-    if (e.key === 'ArrowRight') next = TABS[(i + 1) % TABS.length];
-    if (e.key === 'ArrowLeft') next = TABS[(i - 1 + TABS.length) % TABS.length];
-    if (e.key === 'Home') next = TABS[0];
-    if (e.key === 'End') next = TABS[TABS.length - 1];
-    if (next) { e.preventDefault(); setTab(next.id); tabRefs.current[next.id]?.focus(); }
-  };
+  const requirements = security?.requirements ?? user?.requirements ?? [];
+  const pending = requirements.length > 0;
+  const tabs = (pending ? PENDING_TABS : TABS).map((t) => (t.id === 'overview' && security?.unreviewedAlerts ? { ...t, badge: security.unreviewedAlerts } : t));
+  const active = tabs.some((t) => t.id === tab) ? tab : (requirements[0]?.id === 'change-password' ? 'password' : 'signin');
+
+  const requirementsChanged = async () => { await refresh(); reload(); };
+  const afterSignedOut = () => { clearToken(); window.dispatchEvent(new Event(UNAUTHORIZED_EVENT)); navigate('/login', { replace: true }); };
 
   return (
     <div className="container dashboard">
       <div className="dash-head">
         <p className="eyebrow">Security dashboard</p>
         <h1>{user ? <>Signed in as <span className="email">{user.email}</span></> : 'Your account'}</h1>
+        {user?.role === 'admin' && <p><Link className="btn btn-secondary btn-sm" to="/admin">Open the admin console</Link></p>}
       </div>
 
-      <div className="tabs" role="tablist" aria-label="Dashboard sections" onKeyDown={onKeyDown}>
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            ref={(el) => { tabRefs.current[t.id] = el; }}
-            id={`tab-${t.id}`}
-            role="tab"
-            type="button"
-            className="tab"
-            aria-selected={tab === t.id}
-            aria-controls={`panel-${t.id}`}
-            tabIndex={tab === t.id ? 0 : -1}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {pending && (
+        <Alert type="warning">
+          <strong>Action required.</strong> {requirements.map((r) => r.message).join(' ')}
+        </Alert>
+      )}
 
-      <div id={`panel-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} tabIndex={0} className="tab-panel">
-        {tab === 'overview' && <OverviewPanel security={security} loading={loading} error={error} reload={reload} goTo={setTab} />}
-        {tab === 'twofactor' && <TwoFactorPanel security={security} error={error} reload={reload} email={user?.email || ''} onChange={setData} />}
-        {tab === 'sessions' && <SessionsPanel />}
-        {tab === 'activity' && <ActivityPanel />}
-        {tab === 'password' && <PasswordPanel onChanged={reload} />}
+      <Tabs id="dash" label="Dashboard sections" tabs={tabs} active={active} onChange={setTab} />
+
+      <div id={`dash-panel-${active}`} role="tabpanel" aria-labelledby={`dash-tab-${active}`} tabIndex={0} className="tab-panel">
+        {active === 'overview' && <OverviewPanel security={security} loading={loading} error={error} reload={reload} goTo={setTab} onSignedOut={afterSignedOut} />}
+        {active === 'signin' && <SignInPanel security={security} error={error} reload={reload} email={user?.email || ''} onChange={setData} onRequirementsChanged={requirementsChanged} />}
+        {active === 'recovery' && <RecoveryPanel security={security} error={error} reload={reload} goTo={setTab} />}
+        {active === 'sessions' && <SessionsPanel onSignedOut={afterSignedOut} />}
+        {active === 'activity' && <ActivityPanel />}
+        {active === 'password' && <PasswordPanel security={security} requirement={requirements.find((r) => r.id === 'change-password')} onChanged={requirementsChanged} />}
+        {active === 'tokens' && <TokensPanel />}
       </div>
     </div>
   );

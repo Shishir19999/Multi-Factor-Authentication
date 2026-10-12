@@ -9,12 +9,14 @@
     "dev": "node --watch server.js",
     "test": "node --test --test-concurrency=1 \"test/**/*.test.js\"",
     "seed": "node scripts/seed.js",
-    "mail:test": "node scripts/mail-test.js"
+    "mail:test": "node scripts/mail-test.js",
+    "sync-shared": "node scripts/sync-shared.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@simplewebauthn/server": "^14.0.3",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
     "dotenv": "^18.0.5",

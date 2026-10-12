@@ -7,7 +7,7 @@ process.env.JWT_SECRET = 'test-secret';
 const BASE = process.env.TEST_MONGO_URI || 'mongodb://127.0.0.1:27017';
 
 const { default: mongoose } = await import('mongoose');
-const { default: request } = await import('supertest');
+const { request, noBreach } = await import('./helpers.js');
 const { createApp, MAX_LOGIN_FAILURES } = await import('../app.js');
 const { default: User } = await import('../models/User.js');
 const { base32Decode, totp } = await import('../totp.js');
@@ -17,7 +17,7 @@ const recoveries = [];
 const app = createApp({
   sendOtpEmail: async (email, otp) => { otps.push({ email, otp }); },
   sendRecoveryEmail: async (email, code) => { recoveries.push({ email, code }); },
-  limits: { login: 1000, verify: 1000, resend: 1000, sensitive: 1000, recover: 1000 },
+  limits: { login: 1000, verify: 1000, resend: 1000, sensitive: 1000, recover: 1000, public: 1000 },
 });
 
 before(async () => {
@@ -31,6 +31,7 @@ after(async () => {
 });
 
 const PW = 'secret12';
+const stale = (email) => User.updateOne({ email }, { $set: { 'sessions.$[].stepUpUntil': new Date(0) } });
 const auth = (t) => ({ Authorization: `Bearer ${t}` });
 async function signUp(email) {
   await request(app).post('/auth/register').send({ email, password: PW });
@@ -44,7 +45,7 @@ async function emailLogin(email) {
 test('password policy is enforced on register', async () => {
   const r = await request(app).post('/auth/register').send({ email: 'weak@example.com', password: 'abcdefgh' });
   assert.equal(r.status, 400);
-  assert.match(r.body.message, /letter and one number/);
+  assert.match(r.body.message, /Password needs: a number/);
 });
 
 test('enrol TOTP: needs password, wrong code rejected, backup codes returned once; login then needs a TOTP code', async () => {
@@ -52,6 +53,10 @@ test('enrol TOTP: needs password, wrong code rejected, backup codes returned onc
   await signUp(email);
   const s1 = await emailLogin(email);
   const t = s1.token;
+  await stale(email);
+  const needStepUp = await request(app).post('/auth/2fa/totp/setup').set(auth(t)).send({});
+  assert.equal(needStepUp.status, 403);
+  assert.equal(needStepUp.body.code, 'STEP_UP_REQUIRED');
   assert.equal((await request(app).post('/auth/2fa/totp/setup').set(auth(t)).send({ password: 'wrong-pass1' })).status, 403);
   const setup = await request(app).post('/auth/2fa/totp/setup').set(auth(t)).send({ password: PW });
   assert.match(setup.body.otpauthUrl, /^otpauth:\/\/totp\//);
@@ -85,6 +90,7 @@ test('enrol TOTP: needs password, wrong code rejected, backup codes returned onc
 
   // regenerate needs the password
   const t2 = viaBackup.body.token;
+  await stale(email);
   assert.equal((await request(app).post('/auth/backup-codes/regenerate').set(auth(t2)).send({ password: 'nope-nope1' })).status, 403);
   const regen = await request(app).post('/auth/backup-codes/regenerate').set(auth(t2)).send({ password: PW });
   assert.equal(regen.body.backupCodes.length, 10);
@@ -135,8 +141,9 @@ test('sessions list, revoke one, revoke others; sign-in log; change password', a
 
   const log = await request(app).get('/auth/activity').set(auth(c));
   assert.ok(log.body.events.length >= 3);
-  assert.equal(log.body.events[0].event, 'login');
-  assert.equal(log.body.events[0].ok, true);
+  const lastLogin = log.body.events.find((e) => e.event === 'login');
+  assert.ok(lastLogin && lastLogin.ok === true);
+  assert.ok(log.body.events.some((e) => e.event === 'sessions-revoked'));
 
   const bad = await request(app).post('/auth/change-password').set(auth(c)).send({ currentPassword: 'wrong-pass1', newPassword: 'newpass123' });
   assert.equal(bad.status, 403);
@@ -169,6 +176,7 @@ test('switching to e-mail / off requires the password', async () => {
   const email = 'method@example.com';
   await signUp(email);
   const t = (await emailLogin(email)).token;
+  await stale(email);
   assert.equal((await request(app).post('/auth/2fa/method').set(auth(t)).send({ method: 'none', password: 'wrong-pass1' })).status, 403);
   assert.equal((await request(app).post('/auth/2fa/method').set(auth(t)).send({ method: 'sms', password: PW })).status, 400);
   assert.equal((await request(app).post('/auth/2fa/method').set(auth(t)).send({ method: 'none', password: PW })).body.security.twoFactorMethod, 'none');
