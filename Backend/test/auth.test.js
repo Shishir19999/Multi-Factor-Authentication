@@ -6,7 +6,7 @@ process.env.JWT_SECRET = 'test-secret';
 const BASE = process.env.TEST_MONGO_URI || 'mongodb://127.0.0.1:27017';
 
 const { default: mongoose } = await import('mongoose');
-const { default: request } = await import('supertest');
+const { request, noBreach } = await import('./helpers.js');
 const { createApp, MAX_OTP_ATTEMPTS, RESEND_COOLDOWN_MS } = await import('../app.js');
 const { default: User } = await import('../models/User.js');
 
@@ -16,7 +16,7 @@ const sendOtpEmail = async (email, otp) => {
   if (failMail) throw new Error('smtp down');
   outbox.push({ email, otp });
 };
-const app = createApp({ sendOtpEmail, limits: { login: 1000, verify: 1000, resend: 1000 } });
+const app = createApp({ sendOtpEmail, breach: noBreach, limits: { login: 1000, verify: 1000, resend: 1000, public: 1000 } });
 
 const EMAIL = 'user@example.com';
 const PASSWORD = 'secret12';
@@ -131,7 +131,7 @@ test('mail failure returns 500 and leaves no usable OTP', async () => {
   assert.equal(u.otpSentAt, undefined);
 });
 
-test('logout revokes the token (all earlier tokens for that user)', async () => {
+test('logout ends only this session; the token stops working', async () => {
   await login();
   const t1 = (await verify(lastOtp())).body.token;
   await login();
@@ -143,7 +143,7 @@ test('logout revokes the token (all earlier tokens for that user)', async () => 
   const stale = await request(app).get('/auth/me').set(h(t1));
   assert.equal(stale.status, 401);
   assert.match(stale.body.message, /revoked/);
-  assert.equal((await request(app).get('/auth/me').set(h(t2))).status, 401);
+  assert.equal((await request(app).get('/auth/me').set(h(t2))).status, 200, 'other sessions stay signed in');
   assert.equal((await request(app).post('/auth/logout').set(h(t1))).status, 401, 'cannot logout twice with a stale token');
   await login();
   const t3 = (await verify(lastOtp())).body.token;
@@ -161,7 +161,7 @@ test('token of a deleted user is rejected', async () => {
 });
 
 test('rate limiter returns 429 JSON', async () => {
-  const limited = createApp({ sendOtpEmail, limits: { login: 2 } });
+  const limited = createApp({ sendOtpEmail, breach: noBreach, limits: { login: 2 } });
   for (let i = 0; i < 2; i++) await request(limited).post('/auth/login').send({ email: EMAIL, password: 'x' });
   const r = await request(limited).post('/auth/login').send({ email: EMAIL, password: 'x' });
   assert.equal(r.status, 429);

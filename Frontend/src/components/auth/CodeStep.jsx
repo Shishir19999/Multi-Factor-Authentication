@@ -1,41 +1,60 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { api } from '../../api';
-import { errorMessage } from '../../api/errors';
-import { IS_DEMO } from '../../config';
-import { OPEN_INBOX_EVENT } from '../demo/DemoInbox';
+import { errorMessage, retryAfter } from '../../api/errors';
+import { IS_PREVIEW } from '../../config';
+import { useCountdown } from '../../hooks/useCountdown';
+import { passkeySignIn } from '../../lib/passkeyFlows';
+import { passkeyErrorMessage } from '../../lib/webauthnClient';
+import { canSimulate, realAvailable } from '../../lib/passkeyMode';
+import { usePolicy } from '../../context/contexts';
+import { OPEN_INBOX_EVENT } from '../preview/PreviewInbox';
 import Alert from '../ui/Alert';
 import Button from '../ui/Button';
 import Field from '../ui/Field';
 import OtpInput from '../ui/OtpInput';
+import RetryNotice from '../ui/RetryNotice';
 
-// Second step of sign-in: e-mailed code or authenticator/backup code, with resend countdown and "trust this device".
-function CodeStep({ email, method, initialCooldown = 0, onSuccess, onRestart, onToast }) {
+// Second step of sign-in: e-mailed code, authenticator or backup code, or a passkey; with a resend countdown,
+// a visible rate-limit countdown and "trust this device".
+function CodeStep({ email, method, passkeys = false, initialCooldown = 0, onSuccess, onRestart, onToast }) {
+  const { policy } = usePolicy();
   const [code, setCode] = useState('');
   const [backup, setBackup] = useState('');
   const [useBackup, setUseBackup] = useState(false);
   const [trust, setTrust] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [cooldown, setCooldown] = useState(initialCooldown);
+  const [cooldown, setCooldown] = useCountdown(initialCooldown);
+  const [limited, setLimited] = useCountdown(0);
 
-  useEffect(() => {
-    if (cooldown <= 0) return undefined;
-    const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
-    return () => clearTimeout(t);
-  }, [cooldown]);
+  const fail = (e, fallback) => {
+    const wait = retryAfter(e);
+    if (wait && e.status === 429) setLimited(wait);
+    setError(e.name === 'ApiError' ? errorMessage(e, fallback) : passkeyErrorMessage(e));
+    if (/log in again/i.test(e.message)) setTimeout(onRestart, 1800);
+  };
 
   const submit = async (value) => {
-    if (busy) return;
+    if (busy || limited > 0) return;
     setError('');
     setBusy(true);
     try {
-      const res = await api.verifyCode({ email, code: value, trust });
-      onSuccess(res);
+      onSuccess(await api.verifyCode({ email, code: value, trust }));
     } catch (e) {
-      setError(errorMessage(e, 'Could not verify the code.'));
+      fail(e, 'Could not verify the code.');
       setCode('');
       setBusy(false);
-      if (/log in again/i.test(e.message)) setTimeout(onRestart, 1800);
+    }
+  };
+
+  const usePasskey = async () => {
+    setError('');
+    setBusy(true);
+    try {
+      onSuccess(await passkeySignIn({ purpose: 'mfa', email, trust }));
+    } catch (e) {
+      fail(e, 'Could not use the passkey.');
+      setBusy(false);
     }
   };
 
@@ -46,12 +65,13 @@ function CodeStep({ email, method, initialCooldown = 0, onSuccess, onRestart, on
       setCooldown(res.resendCooldownSeconds || 30);
       onToast('A new code has been sent.', 'success');
     } catch (e) {
-      if (e.data?.retryAfterSeconds) setCooldown(e.data.retryAfterSeconds);
+      if (e.data?.retryAfterSeconds) (e.data.rateLimited ? setLimited : setCooldown)(e.data.retryAfterSeconds);
       setError(errorMessage(e, 'Could not resend the code.'));
     }
   };
 
   const isEmail = method === 'email';
+  const canPasskey = passkeys && (realAvailable() || canSimulate);
 
   return (
     <div className="stack">
@@ -64,35 +84,39 @@ function CodeStep({ email, method, initialCooldown = 0, onSuccess, onRestart, on
         </p>
       </div>
 
-      {IS_DEMO && isEmail && (
+      {IS_PREVIEW && isEmail && (
         <Alert type="info">
-          Demo: no real e-mail is sent. <button type="button" className="link-btn" onClick={() => window.dispatchEvent(new Event(OPEN_INBOX_EVENT))}>Open the Demo inbox</button> to read your code.
+          Live preview: no real e-mail is sent. <button type="button" className="link-btn" onClick={() => window.dispatchEvent(new Event(OPEN_INBOX_EVENT))}>Open the Preview inbox</button> to read your code.
         </Alert>
       )}
 
-      {error && <Alert type="error">{error}</Alert>}
+      <RetryNotice seconds={limited} title="Too many attempts." />
+      {error && limited === 0 && <Alert type="error">{error}</Alert>}
 
       {useBackup ? (
         <form className="stack" onSubmit={(e) => { e.preventDefault(); if (backup.trim()) submit(backup.trim()); }} noValidate>
           <Field label="Backup code" value={backup} onChange={(e) => setBackup(e.target.value)} placeholder="xxxxx-xxxxx" autoComplete="off" autoCapitalize="none" spellCheck={false} hint="Each backup code works once." />
-          <Button type="submit" loading={busy} disabled={!backup.trim()}>Verify backup code</Button>
+          <Button type="submit" loading={busy} disabled={!backup.trim() || limited > 0}>Verify backup code</Button>
         </form>
       ) : (
-        <OtpInput value={code} onChange={setCode} onComplete={submit} disabled={busy} autoFocus error={undefined} />
+        <OtpInput value={code} onChange={setCode} onComplete={submit} disabled={busy || limited > 0} autoFocus error={undefined} />
       )}
 
-      <label className="check">
-        <input type="checkbox" checked={trust} onChange={(e) => setTrust(e.target.checked)} />
-        <span>Trust this device for 30 days</span>
-      </label>
+      {policy.trustedDeviceDays > 0 && (
+        <label className="check">
+          <input type="checkbox" checked={trust} onChange={(e) => setTrust(e.target.checked)} />
+          <span>Trust this device for {policy.trustedDeviceDays} days</span>
+        </label>
+      )}
 
       {!useBackup && (
-        <Button loading={busy} disabled={code.length !== 6} onClick={() => submit(code)}>Verify and sign in</Button>
+        <Button loading={busy} disabled={code.length !== 6 || limited > 0} onClick={() => submit(code)}>Verify and sign in</Button>
       )}
+      {canPasskey && <Button variant="secondary" disabled={busy} onClick={usePasskey}>Use a passkey instead</Button>}
 
       <div className="row-between wrap">
         {isEmail ? (
-          <Button variant="ghost" onClick={resend} disabled={cooldown > 0}>
+          <Button variant="ghost" onClick={resend} disabled={cooldown > 0 || limited > 0}>
             {cooldown > 0 ? `Resend code (${cooldown}s)` : 'Resend code'}
           </Button>
         ) : (

@@ -1,19 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../../api';
-import { errorMessage } from '../../api/errors';
+import { errorMessage, isCancelled } from '../../api/errors';
 import { formatSecret } from '../../lib/totp';
+import { useToast } from '../../context/contexts';
 import Alert from '../ui/Alert';
 import Button from '../ui/Button';
-import { PasswordField } from '../ui/Field';
 import Modal from '../ui/Modal';
 import OtpInput from '../ui/OtpInput';
 import QrCode from '../ui/QrCode';
+import { Loading } from '../ui/States';
 import BackupCodes from './BackupCodes';
 
-// Authenticator enrolment: password -> QR code + secret -> confirm a code -> save backup codes.
+// Authenticator enrolment: (step-up) -> QR code + secret -> confirm a code -> save backup codes.
 function TotpSetup({ open, email, onClose, onEnabled }) {
-  const [step, setStep] = useState('password');
-  const [password, setPassword] = useState('');
+  const { toast } = useToast();
+  const [step, setStep] = useState('scan');
   const [setup, setSetup] = useState(null);
   const [code, setCode] = useState('');
   const [codes, setCodes] = useState([]);
@@ -21,28 +22,29 @@ function TotpSetup({ open, email, onClose, onEnabled }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const reset = () => {
-    setStep('password'); setPassword(''); setSetup(null); setCode(''); setCodes([]); setSaved(false); setError('');
-  };
+  useEffect(() => {
+    if (!open) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const s = await api.totpSetup();
+        if (!cancelled) setSetup(s);
+      } catch (e) {
+        if (cancelled) return;
+        if (!isCancelled(e)) toast(errorMessage(e), 'error');
+        onClose();
+      }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const reset = () => { setStep('scan'); setSetup(null); setCode(''); setCodes([]); setSaved(false); setError(''); };
   const close = () => {
     const done = step === 'codes';
     reset();
     onClose();
     if (done) onEnabled();
-  };
-
-  const start = async (e) => {
-    e.preventDefault();
-    if (!password) { setError('Enter your password to continue.'); return; }
-    setBusy(true); setError('');
-    try {
-      setSetup(await api.totpSetup({ password }));
-      setStep('scan');
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
   };
 
   const confirm = async (value) => {
@@ -53,7 +55,7 @@ function TotpSetup({ open, email, onClose, onEnabled }) {
       setCodes(res.backupCodes);
       setStep('codes');
     } catch (err) {
-      setError(errorMessage(err));
+      if (!isCancelled(err)) setError(errorMessage(err));
       setCode('');
     } finally {
       setBusy(false);
@@ -62,20 +64,8 @@ function TotpSetup({ open, email, onClose, onEnabled }) {
 
   let body;
   let footer = null;
-  if (step === 'password') {
-    body = (
-      <form className="stack" onSubmit={start} noValidate>
-        <p>Confirm your password to start setting up an authenticator app such as Google Authenticator.</p>
-        {error && <Alert type="error">{error}</Alert>}
-        <PasswordField label="Current password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
-        <div className="row gap end">
-          <Button variant="ghost" onClick={close}>Cancel</Button>
-          <Button type="submit" loading={busy}>Continue</Button>
-        </div>
-      </form>
-    );
-  } else if (step === 'scan') {
-    body = (
+  if (step === 'scan') {
+    body = !setup ? <Loading label="Preparing your authenticator setup" lines={4} /> : (
       <div className="stack">
         <ol className="plain-steps">
           <li>Open your authenticator app and choose <strong>Add account</strong> then <strong>Scan a QR code</strong>.</li>

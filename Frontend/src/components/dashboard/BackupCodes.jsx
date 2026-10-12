@@ -1,4 +1,5 @@
 import { useToast } from '../../context/contexts';
+import { downloadText } from '../../lib/download';
 import { formatBackupCodes } from '../../lib/format';
 import Button from '../ui/Button';
 
@@ -6,15 +7,6 @@ import Button from '../ui/Button';
 function BackupCodes({ codes, email }) {
   const { toast } = useToast();
   const text = `Backup codes for ${email}\nEach code works once. Keep them somewhere safe.\n\n${formatBackupCodes(codes)}\n`;
-
-  const download = () => {
-    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'backup-codes.txt';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
 
   const copy = async () => {
     try {
@@ -34,7 +26,7 @@ function BackupCodes({ codes, email }) {
         </ol>
       </div>
       <div className="row gap wrap">
-        <Button variant="secondary" onClick={download}>Download</Button>
+        <Button variant="secondary" onClick={() => downloadText('backup-codes.txt', text)}>Download</Button>
         <Button variant="secondary" onClick={() => window.print()}>Print</Button>
         <Button variant="secondary" onClick={copy}>Copy</Button>
       </div>

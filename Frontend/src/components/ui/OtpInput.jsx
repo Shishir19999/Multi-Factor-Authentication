@@ -1,6 +1,7 @@
 import { useId, useRef } from 'react';
 
-// Six single-digit boxes: auto-advance, backspace goes back, arrows move, paste fills all boxes.
+// Six single-digit boxes: auto-advance, backspace goes back, arrows move, paste fills all boxes, one-time-code autofill.
+// Each box is labelled "digit N of 6" and the group is described by a short instruction for screen-reader users.
 function OtpInput({ value, onChange, onComplete, length = 6, label = 'Verification code', error, disabled = false, autoFocus = false }) {
   const refs = useRef([]);
   const groupId = useId();
@@ -44,9 +45,12 @@ function OtpInput({ value, onChange, onComplete, length = 6, label = 'Verificati
     focusAt(clean.length >= length ? length - 1 : clean.length);
   };
 
+  const describedBy = `${groupId}-h${error ? ` ${groupId}-e` : ''}`;
+
   return (
-    <div className={`otp${error ? ' has-error' : ''}`} role="group" aria-labelledby={`${groupId}-l`} aria-describedby={error ? `${groupId}-e` : undefined}>
+    <div className={`otp${error ? ' has-error' : ''}`} role="group" aria-labelledby={`${groupId}-l`} aria-describedby={describedBy}>
       <span className="otp-label" id={`${groupId}-l`}>{label}</span>
+      <p className="hint" id={`${groupId}-h`}>Type or paste the {length} digits. Use the arrow keys to move between boxes.</p>
       <div className="otp-boxes">
         {digits.map((d, i) => (
           <input
@@ -69,7 +73,7 @@ function OtpInput({ value, onChange, onComplete, length = 6, label = 'Verificati
           />
         ))}
       </div>
-      {error && <p className="error-text" id={`${groupId}-e`}>{error}</p>}
+      {error && <p className="error-text" id={`${groupId}-e`} role="alert">{error}</p>}
     </div>
   );
 }

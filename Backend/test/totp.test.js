@@ -1,9 +1,8 @@
-// Pure unit tests: RFC 4226 / RFC 6238 vectors, base32, backup codes, password policy. No DB, no network.
+// Pure unit tests: RFC 4226 / RFC 6238 vectors, base32, TOTP window and replay step, backup codes. No DB, no network.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { base32Encode, base32Decode, hotp, totp, verifyTotp, otpauthUrl, generateSecret } from '../totp.js';
 import { generateBackupCodes, hashBackupCode, consumeBackupCode, normalizeBackupCode } from '../backupCodes.js';
-import { validatePassword } from '../password.js';
 
 const sha1Key = Buffer.from('12345678901234567890');
 const sha256Key = Buffer.from('12345678901234567890123456789012');
@@ -52,8 +51,8 @@ test('verifyTotp accepts the +-1 step window only and returns the step', () => {
 });
 
 test('otpauth URL carries secret and issuer', () => {
-  const url = otpauthUrl({ secret: 'ABCDEFGH', email: 'you@example.com', issuer: 'Demo App' });
-  assert.equal(url, 'otpauth://totp/Demo%20App:you%40example.com?secret=ABCDEFGH&issuer=Demo%20App&algorithm=SHA1&digits=6&period=30');
+  const url = otpauthUrl({ secret: 'ABCDEFGH', email: 'you@example.com', issuer: 'Sample App' });
+  assert.equal(url, 'otpauth://totp/Sample%20App:you%40example.com?secret=ABCDEFGH&issuer=Sample%20App&algorithm=SHA1&digits=6&period=30');
 });
 
 test('backup codes: unique, hashed, single use, tolerant formatting', () => {
@@ -68,13 +67,4 @@ test('backup codes: unique, hashed, single use, tolerant formatting', () => {
   assert.equal(consumeBackupCode(rest, codes[3]), null, 'already used');
   assert.equal(consumeBackupCode(hashes, 'nope'), null);
   assert.equal(normalizeBackupCode(' ABCDE-fghjk '), 'abcdefghjk');
-});
-
-test('password policy', () => {
-  assert.match(validatePassword('short1'), /at least 8/);
-  assert.match(validatePassword('onlyletters'), /letter and one number/);
-  assert.match(validatePassword('12345678'), /letter and one number/);
-  assert.match(validatePassword('a1'.repeat(40)), /at most/);
-  assert.equal(validatePassword('secret12'), null);
-  assert.match(validatePassword(undefined), /required/);
 });
